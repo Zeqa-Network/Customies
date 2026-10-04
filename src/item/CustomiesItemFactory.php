@@ -189,22 +189,11 @@ final class CustomiesItemFactory {
 	}
 
 	private function applyItemMapping(ItemTypeDictionary $dictionary, string $identifier, int $itemId, ItemTypeEntry $entry): void {
-		$reflection = new ReflectionClass($dictionary);
-
-		$intToString = $reflection->getProperty("intToStringIdMap");
-		/** @var int[] $value */
-		$value = $intToString->getValue($dictionary);
-		$intToString->setValue($dictionary, $value + [$itemId => $identifier]);
-
-		$stringToInt = $reflection->getProperty("stringToIntMap");
-		/** @var int[] $value */
-		$value = $stringToInt->getValue($dictionary);
-		$stringToInt->setValue($dictionary, $value + [$identifier => $itemId]);
-
-		$itemTypes = $reflection->getProperty("itemTypes");
-		$value = $itemTypes->getValue($dictionary);
-		$value[] = $entry;
-		$itemTypes->setValue($dictionary, $value);
+		(function() use ($identifier, $itemId, $entry): void {
+			$this->intToStringIdMap[$itemId] ??= $identifier;
+			$this->stringToIntMap[$identifier] ??= $itemId;
+			$this->itemTypes[] = $entry;
+		})->call($dictionary);
 	}
 
 	/**
