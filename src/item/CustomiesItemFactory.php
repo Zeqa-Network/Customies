@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace customiesdevs\customies\item;
 
 use Closure;
+use customiesdevs\customies\SharedRegistry;
 use customiesdevs\customies\util\NBT;
 use InvalidArgumentException;
 use pmmp\thread\Thread as NativeThread;
@@ -30,6 +31,7 @@ use RuntimeException;
 
 use function array_unique;
 use function array_values;
+use function usort;
 
 final class CustomiesItemFactory {
 	use SingletonTrait;
@@ -84,7 +86,7 @@ final class CustomiesItemFactory {
 		if(!$item instanceof Item) {
 			throw new InvalidArgumentException("Class returned from closure is not a Item");
 		}
-		$itemId = $item->getTypeId();
+		$itemId = SharedRegistry::getInstance()->getItemId($identifier, $item->getTypeId());
 
 		GlobalItemDataHandlers::getDeserializer()->map($identifier, fn() => clone $item);
 		GlobalItemDataHandlers::getSerializer()->map($item, fn() => new SavedItemData($identifier));
@@ -122,6 +124,7 @@ final class CustomiesItemFactory {
 		}	
 
 		$this->itemTableEntries[$identifier] = $entry = new ItemTypeEntry($identifier, $itemId, $componentBased, $componentBased ? 1 : 0, new CacheableNbt($nbt));
+		SharedRegistry::getInstance()->checkItem($entry);
 		$this->registerCustomItemMapping($identifier, $itemId, $entry);
 	}
 
@@ -188,6 +191,31 @@ final class CustomiesItemFactory {
 		}
 	}
 
+	public function registerSharedItems(): void {
+		foreach(SharedRegistry::getInstance()->getItemEntries() as $identifier => $entry){
+			if(!isset($this->itemTableEntries[$identifier])){
+				$this->itemTableEntries[$identifier] = $entry;
+				$this->registerCustomItemMapping($identifier, $entry->getNumericId(), $entry);
+			}
+		}
+		$custom = $this->itemTableEntries;
+		foreach(TypeConverter::getAll() as $converter){
+			(function() use ($custom): void {
+				$vanilla = [];
+				$own = [];
+				foreach($this->itemTypes as $entry){
+					if(isset($custom[$entry->getStringId()])){
+						$own[] = $entry;
+					}else{
+						$vanilla[] = $entry;
+					}
+				}
+				usort($own, static fn(ItemTypeEntry $a, ItemTypeEntry $b): int => $a->getNumericId() <=> $b->getNumericId());
+				$this->itemTypes = [...$vanilla, ...$own];
+			})->call($converter->getItemTypeDictionary());
+		}
+	}
+
 	private function applyItemMapping(ItemTypeDictionary $dictionary, string $identifier, int $itemId, ItemTypeEntry $entry): void {
 		(function() use ($identifier, $itemId, $entry): void {
 			$this->intToStringIdMap[$itemId] ??= $identifier;
@@ -201,9 +229,10 @@ final class CustomiesItemFactory {
 	 * correlates to its block ID.
 	 */
 	public function registerBlockItem(string $identifier, Block $block): void {
-		$itemId = $block->getIdInfo()->getBlockTypeId();
+		$itemId = SharedRegistry::getInstance()->getItemId($identifier, $block->getIdInfo()->getBlockTypeId());
 		StringToItemParser::getInstance()->registerBlock($identifier, fn() => clone $block);
-		$this->itemTableEntries[] = $entry = new ItemTypeEntry($identifier, $itemId, false, 2, new CacheableNbt(CompoundTag::create()));
+		$this->itemTableEntries[$identifier] = $entry = new ItemTypeEntry($identifier, $itemId, false, 2, new CacheableNbt(CompoundTag::create()));
+		SharedRegistry::getInstance()->checkItem($entry);
 		$this->registerCustomItemMapping($identifier, $itemId, $entry);
 
 		$blockItemIdMap = BlockItemIdMap::getInstance();

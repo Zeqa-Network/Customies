@@ -9,6 +9,7 @@ use customiesdevs\customies\block\permutations\Permutation;
 use customiesdevs\customies\block\permutations\Permutations;
 use customiesdevs\customies\item\CreativeInventoryInfo;
 use customiesdevs\customies\item\CustomiesItemFactory;
+use customiesdevs\customies\SharedRegistry;
 use customiesdevs\customies\task\AsyncRegisterBlocksTask;
 use customiesdevs\customies\util\NBT;
 use InvalidArgumentException;
@@ -60,7 +61,7 @@ final class CustomiesBlockFactory {
 	 * can result in massive issues with almost every block showing as the wrong thing and causing lag to clients.
 	 */
 	public function addWorkerInitHook(string $cachePath): void {
-		if($this->blockFuncs === []){
+		if($this->blockFuncs === [] && SharedRegistry::getInstance()->getBlocks() === []){
 			return;
 		}
 		$server = Server::getInstance();
@@ -140,6 +141,7 @@ final class CustomiesBlockFactory {
 		}
 
 		$propertiesProtocol = [ProtocolInfo::CURRENT_PROTOCOL];
+		$stateTags = [];
 		if($block instanceof Permutable) {
 			$blockPropertyNames = $blockPropertyValues = $blockProperties = [];
 			foreach($block->getBlockProperties() as $blockProperty){
@@ -166,6 +168,7 @@ final class CustomiesBlockFactory {
 				foreach($permutations as $i => $value){
 					$states->setTag($blockPropertyNames[$i], NBT::getTagType($value));
 				}
+				$stateTags[] = [$meta, $states];
 				$blockState = CompoundTag::create()
 					->setString(BlockStateData::TAG_NAME, $identifier)
 					->setTag(BlockStateData::TAG_STATES, $states);
@@ -185,6 +188,7 @@ final class CustomiesBlockFactory {
 			};
 		} else {
 			// If a block does not contain any permutations we can just insert the one state.
+			$stateTags[] = [0, CompoundTag::create()];
 			$blockState = CompoundTag::create()
 				->setString(BlockStateData::TAG_NAME, $identifier)
 				->setTag(BlockStateData::TAG_STATES, CompoundTag::create());
@@ -237,7 +241,22 @@ final class CustomiesBlockFactory {
 		foreach($propertiesTags as $protocolId => $propertiesTag){
 			$this->blockPaletteEntries[$protocolId][] = new BlockPaletteEntry($identifier, new CacheableNbt($propertiesTag));
 		}
+		SharedRegistry::getInstance()->checkBlock($identifier, $propertiesTags[ProtocolInfo::CURRENT_PROTOCOL], $stateTags);
 		$this->blockFuncs[$identifier] = [$blockFunc, $serializer, $deserializer];
+	}
+
+	public function registerSharedBlocks(): void {
+		foreach(SharedRegistry::getInstance()->getBlocks() as $identifier => [$properties, $stateTags]){
+			if(isset($this->blockFuncs[$identifier])){
+				continue;
+			}
+			foreach($stateTags as [$meta, $states]){
+				BlockPalette::getInstance()->insertState(CompoundTag::create()
+					->setString(BlockStateData::TAG_NAME, $identifier)
+					->setTag(BlockStateData::TAG_STATES, $states), $meta);
+			}
+			$this->blockPaletteEntries[ProtocolInfo::CURRENT_PROTOCOL][] = new BlockPaletteEntry($identifier, new CacheableNbt($properties));
+		}
 	}
 
 	public function sort(): void {

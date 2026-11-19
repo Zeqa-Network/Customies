@@ -46,6 +46,7 @@ final class AsyncRegisterBlocksTask extends AsyncTask {
 			// the main thread.
 			CustomiesBlockFactory::getInstance()->registerBlock($blockFunc, $identifier, serializer: $this->serializer[$identifier], deserializer: $this->deserializer[$identifier]);
 		}
+		CustomiesBlockFactory::getInstance()->registerSharedBlocks();
 		BlockPalette::getInstance()->sortStates();
 	}
 }

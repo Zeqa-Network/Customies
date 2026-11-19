@@ -5,6 +5,7 @@ namespace customiesdevs\customies;
 
 use customiesdevs\customies\block\BlockPalette;
 use customiesdevs\customies\block\CustomiesBlockFactory;
+use customiesdevs\customies\item\CustomiesItemFactory;
 use pocketmine\plugin\PluginBase;
 use pocketmine\scheduler\ClosureTask;
 
@@ -16,6 +17,9 @@ final class Customies {
 	 */
 	public static function init(PluginBase $plugin): void {
 		$plugin->getServer()->getPluginManager()->registerEvents(new CustomiesListener(), $plugin);
+		CustomiesBlockFactory::getInstance()->registerSharedBlocks();
+		CustomiesItemFactory::getInstance()->registerSharedItems();
+		SharedRegistry::getInstance()->save();
 
 		$cachePath = $plugin->getDataFolder() . "customies_idcache";
 		$plugin->getScheduler()->scheduleDelayedTask(new ClosureTask(static function () use ($cachePath): void {
